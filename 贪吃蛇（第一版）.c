@@ -3,10 +3,11 @@
 #include <time.h>
 #include <conio.h>
 #include <windows.h>
+#include <math.h>  
 
 #define MAX_SNAKE_LENGTH 1000
-#define MAX_FOOD 200  // 增加最大食物数量，适应大场地
-#define FOOD_LIFETIME 50  // 延长食物生命周期，避免消失太快
+#define MAX_FOOD 200  
+#define FOOD_LIFETIME 50  
 
 //方向控制
 #define UP    0
@@ -54,10 +55,20 @@ int main()
     }
     printf("\n");
 
-    // 计算场地面积（除去边框），确定食物数量
+    // 计算场地面积，用于智能适配Q键加速
     int fieldArea = (W - 2) * (H - 2);
+    // 基础速度固定（避免影响刷新）
+    int baseSpeed = 100;
+    // Q键加速速度：场地越大，加速后速度越低（加速越明显）
+    // 公式：面积每增加200，加速速度降低10（最低20）
+    int qSpeed = baseSpeed - (fieldArea / 200) * 10;
+    if (qSpeed < 20) qSpeed = 20;  // 限制最低加速速度
+    int speed = baseSpeed;
+
+    // 食物数量计算
     int targetFoodCount = fieldArea / 50;
     if (targetFoodCount < 5) targetFoodCount = 5;
+
     //********************************************************************************蛇的绘制**********************************************************************************************************//
     srand(time(NULL));
     int snakeX[MAX_SNAKE_LENGTH];
@@ -93,11 +104,10 @@ int main()
             do
             {
                 valid = 1;
-                // 随机生成坐标
                 foods[idx].x = rand() % (W - 2) + 1;
                 foods[idx].y = rand() % (H - 2) + 1;
 
-                // 检查是否与蛇重叠
+                // 检查与蛇重叠
                 for (int j = 0; j < snakeLength; j++)
                 {
                     if (foods[idx].x == snakeX[j] && foods[idx].y == snakeY[j])
@@ -107,16 +117,14 @@ int main()
                     }
                 }
 
-                // 检查是否与其他食物重叠（分散分布）
+                // 检查与其他食物重叠（分散分布）
                 for (int j = 0; j < MAX_FOOD; j++)
                 {
-                    // 替换为外层循环的变量名（比如 idx）
                     if (idx != j && foods[j].active)
                     {
-                        // 避免食物过于密集（距离过近）
                         int distX = abs(foods[idx].x - foods[j].x);
                         int distY = abs(foods[idx].y - foods[j].y);
-                        if (distX < 3 && distY < 3) // 至少间隔3格，确保分散
+                        if (distX < 3 && distY < 3)
                         {
                             valid = 0;
                             break;
@@ -133,8 +141,7 @@ int main()
 
     int gameOver = 0;
     int score = 0;
-    int baseSpeed = 100;
-    int speed = baseSpeed;
+
     //光标隐藏
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     CONSOLE_CURSOR_INFO cursorInfo;
@@ -145,7 +152,7 @@ int main()
     //************************************************************************************移动的处理控制*********************************************************************************************************//
     while (!gameOver)
     {
-        // 处理输入
+        // 处理输入（Q键加速按场地智能适配）
         if (_kbhit())
         {
             char key = _getch();
@@ -155,7 +162,7 @@ int main()
             case 'D': direction = (direction != LEFT) ? RIGHT : direction; break;
             case 'S': direction = (direction != UP) ? DOWN : direction; break;
             case 'A': direction = (direction != RIGHT) ? LEFT : direction; break;
-            case 'Q': speed = baseSpeed / 2; break;
+            case 'Q': speed = qSpeed; break;  // 使用场地适配的加速速度
             case 'E': gameOver = 1; break;
             case '+': break;
             case '-': break;
@@ -382,9 +389,10 @@ int main()
         }
         printf("\n");
 
-        // 显示游戏信息
-        printf("分数: %d  长度: %d  速度: %d  食物数量: %d\n", score, snakeLength, 310 - speed, currentFoodCount);
-        printf("控制: WASD 加速:按住Q 退出:E\n");
+        // 显示游戏信息（展示场地适配的加速速度）
+        printf("分数: %d  长度: %d  基础速度: %d  Q加速速度: %d  食物数量: %d\n",
+            score, snakeLength, baseSpeed, qSpeed, currentFoodCount);
+        printf("控制: WASD 加速:按住Q（按场地智能适配） 退出:E\n");
 
         // 控制游戏速度
         Sleep(speed);
