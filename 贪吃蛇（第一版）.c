@@ -15,6 +15,14 @@
 #define DOWN  2
 #define LEFT  3
 
+// 移动光标到指定位置（避免清屏，直接覆盖绘制）
+void gotoxy(int x, int y) {
+    COORD coord;
+    coord.X = x;
+    coord.Y = y;
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
+}
+
 int main()
 {
     //*****************************************************************************绘制游戏场地**************************************************************************************************//
@@ -32,40 +40,21 @@ int main()
         printf("高度必须至少为2!\n");
         return 1;
     }
-    // 输出顶部
-    for (int i = 0; i < W; i++)
-    {
-        printf("%c", fill_char);
-    }
-    printf("\n");
-    // 输出中间
-    for (int i = 0; i < H - 2; i++)
-    {
-        printf("%c", fill_char);
-        for (int j = 0; j < W - 2; j++)
-        {
-            printf(" ");
-        }
-        printf("%c\n", fill_char);
-    }
-    // 输出底部
-    for (int i = 0; i < W; i++)
-    {
-        printf("%c", fill_char);
-    }
-    printf("\n");
 
-    // 计算场地面积，用于智能适配Q键加速
+    // 隐藏光标（避免光标闪烁）
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    CONSOLE_CURSOR_INFO cursorInfo;
+    GetConsoleCursorInfo(hOut, &cursorInfo);
+    cursorInfo.bVisible = 0;
+    SetConsoleCursorInfo(hOut, &cursorInfo);
+
+    // 计算场地参数
     int fieldArea = (W - 2) * (H - 2);
-    // 基础速度固定（避免影响刷新）
     int baseSpeed = 100;
-    // Q键加速速度：场地越大，加速后速度越低（加速越明显）
-    // 公式：面积每增加200，加速速度降低10（最低20）
     int qSpeed = baseSpeed - (fieldArea / 200) * 10;
-    if (qSpeed < 20) qSpeed = 20;  // 限制最低加速速度
+    if (qSpeed < 20) qSpeed = 20;
     int speed = baseSpeed;
 
-    // 食物数量计算
     int targetFoodCount = fieldArea / 50;
     if (targetFoodCount < 5) targetFoodCount = 5;
 
@@ -117,7 +106,7 @@ int main()
                     }
                 }
 
-                // 检查与其他食物重叠（分散分布）
+                // 检查与其他食物重叠
                 for (int j = 0; j < MAX_FOOD; j++)
                 {
                     if (idx != j && foods[j].active)
@@ -141,18 +130,12 @@ int main()
 
     int gameOver = 0;
     int score = 0;
-
-    //光标隐藏
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    CONSOLE_CURSOR_INFO cursorInfo;
-    GetConsoleCursorInfo(hOut, &cursorInfo);
-    cursorInfo.bVisible = 0;
-    SetConsoleCursorInfo(hOut, &cursorInfo);
+    int frame = 0;  // 用于减少重绘频率（进一步防闪烁）
 
     //************************************************************************************移动的处理控制*********************************************************************************************************//
     while (!gameOver)
     {
-        // 处理输入（Q键加速按场地智能适配）
+        // 处理输入
         if (_kbhit())
         {
             char key = _getch();
@@ -162,7 +145,7 @@ int main()
             case 'D': direction = (direction != LEFT) ? RIGHT : direction; break;
             case 'S': direction = (direction != UP) ? DOWN : direction; break;
             case 'A': direction = (direction != RIGHT) ? LEFT : direction; break;
-            case 'Q': speed = qSpeed; break;  // 使用场地适配的加速速度
+            case 'Q': speed = qSpeed; break;
             case 'E': gameOver = 1; break;
             case '+': break;
             case '-': break;
@@ -170,7 +153,7 @@ int main()
         }
         else
         {
-            speed = baseSpeed;  // 恢复基础速度
+            speed = baseSpeed;
         }
 
         // 移动蛇
@@ -188,13 +171,13 @@ int main()
         case LEFT:  snakeX[0]--; break;
         }
 
-        // 墙
+        // 墙碰撞
         if (snakeX[0] <= 0 || snakeX[0] >= W - 1 || snakeY[0] <= 0 || snakeY[0] >= H - 1)
         {
             gameOver = 1;
         }
 
-        // 检查撞到自己
+        // 自碰撞
         for (int i = 1; i < snakeLength; i++)
         {
             if (snakeX[0] == snakeX[i] && snakeY[0] == snakeY[i])
@@ -203,7 +186,7 @@ int main()
             }
         }
 
-        // 检查吃食物
+        // 吃食物
         int ateFood = 0;
         for (int i = 0; i < MAX_FOOD; i++)
         {
@@ -214,13 +197,12 @@ int main()
                 ateFood++;
                 currentFoodCount--;
 
-                // 蛇生长
                 int grow = rand() % 3 + 1;
                 snakeLength = (snakeLength + grow > MAX_SNAKE_LENGTH) ? MAX_SNAKE_LENGTH : snakeLength + grow;
             }
         }
 
-        // 生成新食物,保持目标数量
+        // 补充食物
         while (ateFood > 0 && currentFoodCount < targetFoodCount && currentFoodCount < MAX_FOOD)
         {
             int idx = rand() % MAX_FOOD;
@@ -233,7 +215,6 @@ int main()
                     foods[idx].x = rand() % (W - 2) + 1;
                     foods[idx].y = rand() % (H - 2) + 1;
 
-                    // 检查与蛇重叠
                     for (int j = 0; j < snakeLength; j++)
                     {
                         if (foods[idx].x == snakeX[j] && foods[idx].y == snakeY[j])
@@ -243,7 +224,6 @@ int main()
                         }
                     }
 
-                    // 检查与其他食物重叠（保持分散）
                     for (int j = 0; j < MAX_FOOD; j++)
                     {
                         if (idx != j && foods[j].active)
@@ -266,7 +246,7 @@ int main()
             }
         }
 
-        // 更新食物生命周期：过期补充新食物，保持数量
+        // 更新食物生命周期
         for (int i = 0; i < MAX_FOOD; i++)
         {
             if (foods[i].active)
@@ -277,7 +257,6 @@ int main()
                     foods[i].active = 0;
                     currentFoodCount--;
 
-                    // 补充新食物
                     if (currentFoodCount < targetFoodCount && currentFoodCount < MAX_FOOD)
                     {
                         int valid;
@@ -287,7 +266,6 @@ int main()
                             foods[i].x = rand() % (W - 2) + 1;
                             foods[i].y = rand() % (H - 2) + 1;
 
-                            // 检查与蛇重叠
                             for (int j = 0; j < snakeLength; j++)
                             {
                                 if (foods[i].x == snakeX[j] && foods[i].y == snakeY[j])
@@ -297,7 +275,6 @@ int main()
                                 }
                             }
 
-                            // 检查与其他食物分散
                             for (int j = 0; j < MAX_FOOD; j++)
                             {
                                 if (i != j && foods[j].active)
@@ -321,8 +298,8 @@ int main()
             }
         }
 
-        // 清屏
-        system("cls");
+        // 绘制优化：移动光标到左上角，覆盖绘制（无清屏）
+        gotoxy(0, 0);
 
         // 绘制顶部边框
         for (int i = 0; i < W; i++)
@@ -334,7 +311,7 @@ int main()
         // 绘制中间部分
         for (int y = 1; y < H - 1; y++)
         {
-            printf("%c", fill_char);
+            printf("%c", fill_char);  // 左侧边框
 
             for (int x = 1; x < W - 1; x++)
             {
@@ -374,12 +351,12 @@ int main()
 
                     if (!hasFood)
                     {
-                        printf(" ");
+                        printf(" ");  // 空白
                     }
                 }
             }
 
-            printf("%c\n", fill_char);
+            printf("%c\n", fill_char);  // 右侧边框
         }
 
         // 绘制底部边框
@@ -389,12 +366,12 @@ int main()
         }
         printf("\n");
 
-        // 显示游戏信息（展示场地适配的加速速度）
+        // 显示游戏信息
         printf("分数: %d  长度: %d  基础速度: %d  Q加速速度: %d  食物数量: %d\n",
             score, snakeLength, baseSpeed, qSpeed, currentFoodCount);
-        printf("控制: WASD 加速:按住Q（按场地智能适配） 退出:E\n");
+        printf("控制: WASD 加速:按住Q 退出:E\n");
 
-        // 控制游戏速度
+        // 控制速度
         Sleep(speed);
     }
 
