@@ -5,8 +5,8 @@
 #include <windows.h>
 
 #define MAX_SNAKE_LENGTH 1000
-#define MAX_FOOD 5
-#define FOOD_LIFETIME 50
+#define MAX_FOOD 200  // 增加最大食物数量，适应大场地
+#define FOOD_LIFETIME 50  // 延长食物生命周期，避免消失太快
 
 //方向控制
 #define UP    0
@@ -54,6 +54,10 @@ int main()
     }
     printf("\n");
 
+    // 计算场地面积（除去边框），确定食物数量
+    int fieldArea = (W - 2) * (H - 2);
+    int targetFoodCount = fieldArea / 50;
+    if (targetFoodCount < 5) targetFoodCount = 5;
     //********************************************************************************蛇的绘制**********************************************************************************************************//
     srand(time(NULL));
     int snakeX[MAX_SNAKE_LENGTH];
@@ -79,21 +83,58 @@ int main()
         foods[i].active = 0;
     }
     //初始食物
-    for (int i = 0; i < 2; i++)
+    int currentFoodCount = 0;
+    while (currentFoodCount < targetFoodCount && currentFoodCount < MAX_FOOD)
     {
         int idx = rand() % MAX_FOOD;
         if (!foods[idx].active)
         {
-            foods[idx].x = rand() % (W - 2) + 1;
-            foods[idx].y = rand() % (H - 2) + 1;
-            foods[idx].lifetime = FOOD_LIFETIME;
+            int valid;
+            do
+            {
+                valid = 1;
+                // 随机生成坐标
+                foods[idx].x = rand() % (W - 2) + 1;
+                foods[idx].y = rand() % (H - 2) + 1;
+
+                // 检查是否与蛇重叠
+                for (int j = 0; j < snakeLength; j++)
+                {
+                    if (foods[idx].x == snakeX[j] && foods[idx].y == snakeY[j])
+                    {
+                        valid = 0;
+                        break;
+                    }
+                }
+
+                // 检查是否与其他食物重叠（分散分布）
+                for (int j = 0; j < MAX_FOOD; j++)
+                {
+                    // 替换为外层循环的变量名（比如 idx）
+                    if (idx != j && foods[j].active)
+                    {
+                        // 避免食物过于密集（距离过近）
+                        int distX = abs(foods[idx].x - foods[j].x);
+                        int distY = abs(foods[idx].y - foods[j].y);
+                        if (distX < 3 && distY < 3) // 至少间隔3格，确保分散
+                        {
+                            valid = 0;
+                            break;
+                        }
+                    }
+                }
+            } while (!valid);
+
+            foods[idx].lifetime = FOOD_LIFETIME + rand() % 30;
             foods[idx].active = 1;
+            currentFoodCount++;
         }
     }
 
     int gameOver = 0;
     int score = 0;
-    int speed = 100;
+    int baseSpeed = 100;
+    int speed = baseSpeed;
     //光标隐藏
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     CONSOLE_CURSOR_INFO cursorInfo;
@@ -104,7 +145,7 @@ int main()
     //************************************************************************************移动的处理控制*********************************************************************************************************//
     while (!gameOver)
     {
-        // 处理输入（修改为大写 WASD）
+        // 处理输入
         if (_kbhit())
         {
             char key = _getch();
@@ -114,10 +155,15 @@ int main()
             case 'D': direction = (direction != LEFT) ? RIGHT : direction; break;
             case 'S': direction = (direction != UP) ? DOWN : direction; break;
             case 'A': direction = (direction != RIGHT) ? LEFT : direction; break;
-            case 'Q': gameOver = 1; break;
-            case '+': if (speed > 20) speed -= 10; break;
-            case '-': if (speed < 300) speed += 10; break;
+            case 'Q': speed = baseSpeed / 2; break;
+            case 'E': gameOver = 1; break;
+            case '+': break;
+            case '-': break;
             }
+        }
+        else
+        {
+            speed = baseSpeed;  // 恢复基础速度
         }
 
         // 移动蛇
@@ -158,57 +204,62 @@ int main()
             {
                 foods[i].active = 0;
                 score += 10;
-                ateFood = 1;
+                ateFood++;
+                currentFoodCount--;
 
+                // 蛇生长
                 int grow = rand() % 3 + 1;
                 snakeLength = (snakeLength + grow > MAX_SNAKE_LENGTH) ? MAX_SNAKE_LENGTH : snakeLength + grow;
             }
         }
 
-        // 生成新食物
-        if (ateFood)
+        // 生成新食物,保持目标数量
+        while (ateFood > 0 && currentFoodCount < targetFoodCount && currentFoodCount < MAX_FOOD)
         {
-            for (int i = 0; i < MAX_FOOD; i++)
+            int idx = rand() % MAX_FOOD;
+            if (!foods[idx].active)
             {
-                if (!foods[i].active)
+                int valid;
+                do
                 {
-                    int valid;
-                    do
+                    valid = 1;
+                    foods[idx].x = rand() % (W - 2) + 1;
+                    foods[idx].y = rand() % (H - 2) + 1;
+
+                    // 检查与蛇重叠
+                    for (int j = 0; j < snakeLength; j++)
                     {
-                        valid = 1;
-                        foods[i].x = rand() % (W - 2) + 1;
-                        foods[i].y = rand() % (H - 2) + 1;
-
-                        // 检查是否与蛇重叠
-                        for (int j = 0; j < snakeLength; j++)
+                        if (foods[idx].x == snakeX[j] && foods[idx].y == snakeY[j])
                         {
-                            if (foods[i].x == snakeX[j] && foods[i].y == snakeY[j])
+                            valid = 0;
+                            break;
+                        }
+                    }
+
+                    // 检查与其他食物重叠（保持分散）
+                    for (int j = 0; j < MAX_FOOD; j++)
+                    {
+                        if (idx != j && foods[j].active)
+                        {
+                            int distX = abs(foods[idx].x - foods[j].x);
+                            int distY = abs(foods[idx].y - foods[j].y);
+                            if (distX < 3 && distY < 3)
                             {
                                 valid = 0;
                                 break;
                             }
                         }
+                    }
+                } while (!valid);
 
-                        // 检查是否与其他食物重叠
-                        for (int j = 0; j < MAX_FOOD; j++)
-                        {
-                            if (i != j && foods[j].active &&
-                                foods[i].x == foods[j].x && foods[i].y == foods[j].y)
-                            {
-                                valid = 0;
-                                break;
-                            }
-                        }
-                    } while (!valid);
-
-                    foods[i].lifetime = FOOD_LIFETIME;
-                    foods[i].active = 1;
-                    break;
-                }
+                foods[idx].lifetime = FOOD_LIFETIME + rand() % 30;
+                foods[idx].active = 1;
+                currentFoodCount++;
+                ateFood--;
             }
         }
 
-        // 更新食物
+        // 更新食物生命周期：过期补充新食物，保持数量
         for (int i = 0; i < MAX_FOOD; i++)
         {
             if (foods[i].active)
@@ -217,38 +268,48 @@ int main()
                 if (foods[i].lifetime <= 0)
                 {
                     foods[i].active = 0;
+                    currentFoodCount--;
 
-                    int valid;
-                    do
+                    // 补充新食物
+                    if (currentFoodCount < targetFoodCount && currentFoodCount < MAX_FOOD)
                     {
-                        valid = 1;
-                        foods[i].x = rand() % (W - 2) + 1;
-                        foods[i].y = rand() % (H - 2) + 1;
-
-                        // 检查是否与蛇重叠
-                        for (int j = 0; j < snakeLength; j++)
+                        int valid;
+                        do
                         {
-                            if (foods[i].x == snakeX[j] && foods[i].y == snakeY[j])
-                            {
-                                valid = 0;
-                                break;
-                            }
-                        }
+                            valid = 1;
+                            foods[i].x = rand() % (W - 2) + 1;
+                            foods[i].y = rand() % (H - 2) + 1;
 
-                        // 检查是否与其他食物重叠
-                        for (int j = 0; j < MAX_FOOD; j++)
-                        {
-                            if (i != j && foods[j].active &&
-                                foods[i].x == foods[j].x && foods[i].y == foods[j].y)
+                            // 检查与蛇重叠
+                            for (int j = 0; j < snakeLength; j++)
                             {
-                                valid = 0;
-                                break;
+                                if (foods[i].x == snakeX[j] && foods[i].y == snakeY[j])
+                                {
+                                    valid = 0;
+                                    break;
+                                }
                             }
-                        }
-                    } while (!valid);
 
-                    foods[i].lifetime = FOOD_LIFETIME;
-                    foods[i].active = 1;
+                            // 检查与其他食物分散
+                            for (int j = 0; j < MAX_FOOD; j++)
+                            {
+                                if (i != j && foods[j].active)
+                                {
+                                    int distX = abs(foods[i].x - foods[j].x);
+                                    int distY = abs(foods[i].y - foods[j].y);
+                                    if (distX < 3 && distY < 3)
+                                    {
+                                        valid = 0;
+                                        break;
+                                    }
+                                }
+                            }
+                        } while (!valid);
+
+                        foods[i].lifetime = FOOD_LIFETIME + rand() % 30;
+                        foods[i].active = 1;
+                        currentFoodCount++;
+                    }
                 }
             }
         }
@@ -298,7 +359,7 @@ int main()
                     {
                         if (foods[i].active && foods[i].x == x && foods[i].y == y)
                         {
-                            printf("*");  // 食物（半角字符 *）
+                            printf("*");  // 食物
                             hasFood = 1;
                             break;
                         }
@@ -321,9 +382,9 @@ int main()
         }
         printf("\n");
 
-        // 显示游戏信息（修改为大写 WASD）
-        printf("分数: %d  长度: %d  速度: %d\n", score, snakeLength, 310 - speed);
-        printf("控制: WASD 加速:+ 减速:- 退出:Q\n");  // 改为大写 WASD
+        // 显示游戏信息
+        printf("分数: %d  长度: %d  速度: %d  食物数量: %d\n", score, snakeLength, 310 - speed, currentFoodCount);
+        printf("控制: WASD 加速:按住Q 退出:E\n");
 
         // 控制游戏速度
         Sleep(speed);
